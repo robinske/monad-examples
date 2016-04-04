@@ -1,0 +1,5 @@
+# this is the build directory of the project. don't add your binaries to your git repo
+*target/
+
+# if you're using IntelliJ, this will store metadata for the IDE
+.idea
