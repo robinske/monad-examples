@@ -7,13 +7,12 @@ import me.krobinson.monads.Free._
 object FreeExamples {
   import Free._
 
-  val free: Free[Context, String] =
+  val free: Free[Id, String] =
     for {
-      a <- pure("chain")
-      b <- pure("these")
-      c <- pure("together")
+      a <- Done("chain")
+      b <- Done("these")
+      c <- Done("together")
     } yield s"$a $b $c"
-
 
   sealed trait Todo[A]
   case class NewTask[A](task: A) extends Todo[A]
@@ -24,22 +23,6 @@ object FreeExamples {
   def completeTask[A](task: A): Free[Todo, A] = Suspend(CompleteTask(task))
   def getTasks[A](default: A): Free[Todo, A] = Suspend(GetTasks(default))
 
-
-  case object TestEvaluator extends (Todo ~> Id) {
-    var model: Map[String, Boolean] = Map.empty
-    def apply[A](a: Todo[A]): Id[A] = {
-      a match {
-        case NewTask(task) =>
-          model = model + (task.toString -> false)
-          task
-        case CompleteTask(task) =>
-          model = model + (task.toString -> true)
-          task
-        case GetTasks(default) =>
-          default
-      }
-    }
-  }
 
   case object ProductionEvaluator extends (Todo ~> Id) {
     def apply[A](a: Todo[A]): Id[A] = {
@@ -67,13 +50,13 @@ class Spec extends FunSpec with Matchers {
   describe("Free") {
     it("should evaluate todos") {
 
-      val todos: Free[Todo, String] =
+      val todos: Free[Todo, List[String]] =
         for {
           _    <- newTask("Go to scala days")
           _    <- newTask("Write a novel")
           _    <- newTask("Meet Tina Fey")
           _    <- completeTask("Go to scala days")
-          tsks <- getTasks[String](default = "no results found")
+          tsks <- getTasks(default = List.empty[String])
         } yield tsks
 
       val expected: Map[String, Boolean] =
@@ -94,6 +77,22 @@ class Spec extends FunSpec with Matchers {
           fn(given)
       }
 
+      case object TestEvaluator extends (Todo ~> Id) {
+        var model: Map[String, Boolean] = Map.empty
+        def apply[A](a: Todo[A]): Id[A] = {
+          a match {
+            case NewTask(task) =>
+              model = model + (task.toString -> false)
+              task
+            case CompleteTask(task) =>
+              model = model + (task.toString -> true)
+              task
+            case GetTasks(default) =>
+              default
+          }
+        }
+      }
+
       val result = runWithInterpreter(todos)(TestEvaluator)
       TestEvaluator.model shouldBe expected
     }
@@ -103,11 +102,11 @@ class Spec extends FunSpec with Matchers {
 
   describe("Free") {
     it("should construct a nested datastructure with .flatMap and .map methods") {
-      val expected: Free[Context, String] =
-        More[Context, String, String](
-          Done[Context, String]("chain"), a => More[Context, String, String](
-            Done[Context, String]("these"), b => More[Context, String, String](
-              Done[Context, String]("together"), c => Done[Context, String](s"$a $b $c")
+      val expected: Free[Id, String] =
+        More[Id, String, String](
+          Done[Id, String]("chain"), a => More[Id, String, String](
+            Done[Id, String]("these"), b => More[Id, String, String](
+              Done[Id, String]("together"), c => Done[Id, String](s"$a $b $c")
             )
           )
         )

@@ -1,16 +1,12 @@
 package me.krobinson.monads
 
 
-trait NaturalTransformation[F[_], G[_]] {
-  def apply[A](f: F[A]): G[A]
-}
-
 sealed trait Free[F[_], A] { self =>
   def flatMap[B](fn: A => Free[F, B]): Free[F, B] =
     More(self, (a: A) => fn(a))
 
   def map[B](fn: A => B): Free[F, B] =
-    flatMap(a => Free.pure(fn(a)))
+    flatMap(a => Done(fn(a)))
 }
 
 case class Done[F[_], A](given: A) extends Free[F, A]
@@ -19,15 +15,14 @@ case class More[F[_], A, B](free: Free[F, A], fn: A => Free[F, B]) extends Free[
 
 object Free {
 
+  trait NaturalTransformation[F[_], G[_]] {
+    def apply[A](f: F[A]): G[A]
+  }
+
   type ~>[F[_], G[_]] = NaturalTransformation[F, G]
   type Id[A] = A
 
-  sealed trait Context[A]
-  case class GetValue[A](value: A) extends Context[A]
-  case class SetValue[A](value: A) extends Context[Unit]
-
-  def pure[F[_], B](a: B): Free[F, B] = Done(a)
-
+  // basic interpreter for the string concatenation example
   @annotation.tailrec
   def run[F[_], A](f: Free[F, A]): A = f match {
     case Done(s)                     => s
@@ -35,18 +30,24 @@ object Free {
     case More(Done(given), fn)       => run(fn(given))
   }
 
-  def runWithInterpreter[F[_], G[_], A](f: Free[F, A])(transform: F ~> G)(implicit G: Monad[G]): G[A] = {
-    f match {
-      case Done(a)                  => G.pure(a)
+  def runWithInterpreter[F[_], G[_], A](f: Free[F, A])(transform: F ~> G)(implicit monad: Monad[G]): G[A] = {
+    @annotation.tailrec
+    def tailThis(free: Free[F, A]): Free[F, A] = free match {
+      case More(More(fr, fn1), fn2) => tailThis(fr.flatMap(a1 => fn1(a1).flatMap(a2 => fn2(a2))))
+      case More(Done(a), fn)        => tailThis(fn(a))
+      case _                        => free
+    }
+
+    tailThis(f) match {
+      case Done(a)                  => monad.pure(a)
       case Suspend(fa)              => transform(fa)
-      case More(Suspend(fa), fn)    => G.flatMap(transform(fa))(a => runWithInterpreter(fn(a))(transform))
-      case More(More(fr, fn1), fn2) => runWithInterpreter(fr.flatMap(a1 => fn1(a1).flatMap(a2 => fn2(a2))))(transform)
-      case More(Done(a), fn)        => runWithInterpreter(fn(a))(transform)
+      case More(Suspend(fa), fn)    => monad.flatMap(transform(fa))(a => runWithInterpreter(fn(a))(transform))
+      case _                        => throw new AssertionError("Unreachable")
     }
   }
 
-  def runLoop[A](c: Free[Context, A]): A = {
-    var eval: Free[Context, A] = c
+  def runLoop[A](c: Free[Id, A]): A = {
+    var eval: Free[Id, A] = c
 
     while (true) {
       eval match {
