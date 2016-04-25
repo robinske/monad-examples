@@ -30,6 +30,23 @@ case object ProductionEvaluator extends FunctorTransformer[Todo, Option] {
 }
 
 
+case object PrintEvaluator extends FunctorTransformer[Todo, Id] {
+  def apply[A](a: Todo[A]): Id[A] = {
+    a match {
+      case NewTask(task) =>
+        println(s"New task added: $task")
+        task
+      case CompleteTask(task) =>
+        println(s"Task completed: $task")
+        task
+      case GetTasks(default) =>
+        println(s"Request to fetch tasks")
+        default
+    }
+  }
+}
+
+
 object FreeExamples {
   import Todo._
 
@@ -69,5 +86,9 @@ object FreeExamples {
         )
       )
     )
+
+  def main(args: Array[String]) {
+    runFree(todos)(PrintEvaluator)
+  }
 
 }
