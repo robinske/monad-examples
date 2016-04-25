@@ -4,60 +4,45 @@ import org.scalatest.{FunSpec, Matchers}
 import me.krobinson.monads.Free._
 
 
-object FreeExamples {
-  import Free._
+class Spec extends FunSpec with Matchers {
 
-  val free: Free[Id, String] =
-    for {
-      a <- Done("chain")
-      b <- Done("these")
-      c <- Done("together")
-    } yield s"$a $b $c"
+  import FreeExamples._
 
-  sealed trait Todo[A]
-  case class NewTask[A](task: A) extends Todo[A]
-  case class CompleteTask[A](task: A) extends Todo[A]
-  case class GetTasks[A](default: A) extends Todo[A]
-
-  def newTask[A](task: A): Free[Todo, A] = Suspend(NewTask(task))
-  def completeTask[A](task: A): Free[Todo, A] = Suspend(CompleteTask(task))
-  def getTasks[A](default: A): Free[Todo, A] = Suspend(GetTasks(default))
-
-
-  case object ProductionEvaluator extends (Todo ~> Id) {
+  case class TestEvaluator(var model: Map[String, Boolean]) extends FunctorTransformer[Todo, Id] {
     def apply[A](a: Todo[A]): Id[A] = {
-      var results: List[A] = List.empty
       a match {
         case NewTask(task) =>
-          // database write
+          model = model + (task.toString -> false)
           task
         case CompleteTask(task) =>
-          // database write
+          model = model + (task.toString -> true)
           task
         case GetTasks(default) =>
-          // database read
+          model.asInstanceOf[A]
+      }
+    }
+  }
+
+  case object ActionTestEvaluator extends FunctorTransformer[Todo, Id] {
+    var actions: List[Todo[String]] = List.empty
+    def apply[A](a: Todo[A]): Id[A] = {
+      a match {
+        case NewTask(task) =>
+          actions = actions :+ NewTask(task.toString)
+          task
+        case CompleteTask(task) =>
+          actions = actions :+ CompleteTask(task.toString)
+          task
+        case GetTasks(default) =>
+          actions = actions :+ GetTasks("")
           default
       }
     }
   }
 
-}
-
-class Spec extends FunSpec with Matchers {
-
-  import FreeExamples._
-
   describe("Free") {
     it("should evaluate todos") {
-
-      val todos: Free[Todo, List[String]] =
-        for {
-          _    <- newTask("Go to scala days")
-          _    <- newTask("Write a novel")
-          _    <- newTask("Meet Tina Fey")
-          _    <- completeTask("Go to scala days")
-          tsks <- getTasks(default = List.empty[String])
-        } yield tsks
+      val result = runFree(todos)(TestEvaluator(Map.empty))
 
       val expected: Map[String, Boolean] =
         Map(
@@ -66,38 +51,37 @@ class Spec extends FunSpec with Matchers {
           "Meet Tina Fey" -> false
         )
 
-      implicit object id extends Monad[Id] {
-        override def pure[A](given: A): Id[A] =
-          given
-
-        override def map[A, B](given: Id[A])(fn: A => B): Id[B] =
-          fn(given)
-
-        override def flatMap[A, B](given: Id[A])(fn: A => Id[B]): Id[B] =
-          fn(given)
-      }
-
-      case object TestEvaluator extends (Todo ~> Id) {
-        var model: Map[String, Boolean] = Map.empty
-        def apply[A](a: Todo[A]): Id[A] = {
-          a match {
-            case NewTask(task) =>
-              model = model + (task.toString -> false)
-              task
-            case CompleteTask(task) =>
-              model = model + (task.toString -> true)
-              task
-            case GetTasks(default) =>
-              default
-          }
-        }
-      }
-
-      val result = runWithInterpreter(todos)(TestEvaluator)
-      TestEvaluator.model shouldBe expected
+      result shouldBe expected
+      runFree(todos)(TestEvaluator(Map.empty)) shouldBe runFree(todosExpanded)(TestEvaluator(Map.empty))
     }
 
+    it("should evaluate todos with an action evaluator") {
+      runFree(todos)(ActionTestEvaluator)
 
+      val expected: List[Todo[String]] =
+        List(
+          NewTask("Go to scala days"),
+          NewTask("Write a novel"),
+          NewTask("Meet Tina Fey"),
+          CompleteTask("Go to scala days"),
+          GetTasks("")
+        )
+
+      ActionTestEvaluator.actions shouldBe expected
+    }
+  }
+
+  describe("#runLoop") {
+    it("should evaluate the Free Monad") {
+      val expected: Map[String, Boolean] =
+        Map(
+          "Go to scala days" -> true,
+          "Write a novel" -> false,
+          "Meet Tina Fey" -> false
+        )
+
+      Free.runLoop(todos)(TestEvaluator(Map.empty)) shouldBe expected
+    }
   }
 
   describe("Free") {
@@ -111,19 +95,13 @@ class Spec extends FunSpec with Matchers {
           )
         )
 
-      Free.run(free) shouldBe Free.run(expected)
+      Free.run(freeStrings) shouldBe Free.run(expected)
     }
   }
 
   describe("#run") {
     it("should evaluate the Free Monad") {
-      Free.run(free) shouldBe "chain these together"
-    }
-  }
-
-  describe("#runLoop") {
-    it("should evaluate the Free Monad") {
-      Free.runLoop(free) shouldBe "chain these together"
+      Free.run(freeStrings) shouldBe "chain these together"
     }
   }
 
@@ -143,7 +121,6 @@ class Spec extends FunSpec with Matchers {
     it("should follow identity and composition properties") {
 
       // Identity:
-      def identity[A](a: A): A = a
       assert(map(Some("foo"))(identity) == Some("foo"))
 
       // Composition:
@@ -152,5 +129,57 @@ class Spec extends FunSpec with Matchers {
       val h: String => String = s => s + "a"
       assert(map(Some("sc"))(f andThen g andThen h) == map(map(map(Some("sc"))(f))(g))(h))
     }
+  }
+
+  describe("MonoidExamples") {
+    it("should follow Monoid laws for string concatenation") {
+      import StringConcat._
+
+      // associativity
+      assert(append("foo", append("bar", "baz")) == append(append("foo", "bar"), "baz"))
+
+      // identity
+      assert(append("foo", identity) == "foo")
+      assert(append(identity, "foo") == "foo")
+    }
+
+    it("should follow Monoid laws for integer addition") {
+      import IntegerAddition._
+
+      // associativity
+      assert(append(2, append(3, 4)) == append(append(2, 3), 4))
+
+      // identity
+      assert(append(1, identity) == 1)
+      assert(append(identity, 1) == 1)
+    }
+
+    it("should follow Monoid laws for integer multiplication") {
+      import IntegerMultiplication._
+
+      // associativity
+      assert(append(2, append(3, 4)) == append(append(2, 3), 4))
+
+      // identity
+      assert(append(1, identity) == 1)
+      assert(append(identity, 1) == 1)
+    }
+
+    it("should follow Monoid laws for function composition") {
+      import FunctionComposition._
+
+      // associativity
+      val f = { s: String => s + "a" }
+      val g = { s: String => s + "l" }
+      val h = { s: String => s + "a" }
+
+      // evaluate the functions, can't compare functions for tests
+      assert(append(f, append(g, h))("sc") == append(append(f, g), h)("sc"))
+
+      // identity
+      assert(append(f, identity[String])("sc") == "sca")
+      assert(append(identity[String], f)("sc") == "sca")
+    }
+
   }
 }

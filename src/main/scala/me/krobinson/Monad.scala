@@ -3,48 +3,10 @@ package me.krobinson.monads
 trait Monoid[A] {
   def append(a: A, b: A): A
   def identity: A
-  /**
-    * Associativity property:
-    *   append(a, append(b,c)) ==
-    *   append(append(a,b), c)
-    *
-    * Identity property:
-    *   append(a, identity) ==
-    *   append(identity, a) ==
-    *   a
-    */
 }
 
 trait Functor[F[_]] {
-
   def map[A, B](a: F[A])(fn: A => B): F[B]
-
-  /**
-    * Identity:
-    *   map(fa)(identity) == fa
-    *
-    * Composition:
-    *   map(fa)(f andThen g) ==
-    *   map(map(fa)(f))(g)
-    */
-}
-
-sealed trait Option[+A]
-case class Some[A](a: A) extends Option[A]
-case object None extends Option[Nothing]
-
-object OptionFunctor extends Functor[Option] {
-
-  def pure[A](a: A): Option[A] = Some(a)
-
-  def flatMap[A, B](a: Option[A])(fn: A => Option[B]): Option[B] =
-    a match {
-      case Some(something) => fn(something)
-      case None            => None
-    }
-
-  def map[A, B](a: Option[A])(fn: A => B): Option[B] =
-    flatMap(a) { b: A => pure(fn(b)) }
 }
 
 trait Monad[M[_]] extends Functor[M] /* with Monoid[_ => M[_]] */ {
@@ -62,8 +24,4 @@ trait Monad[M[_]] extends Functor[M] /* with Monoid[_ => M[_]] */ {
   }
 
   def identity[A]: A => M[A] = a => pure(a)
-
-  // And the laws apply!
-  // Associativity: flatMap(pure(a), x => flatMap(f(x), g)) == flatMap(flatMap(pure(a), f), g)
-  // Identity: flatMap(pure(a), f) == flatMap(f(x), pure) == f(x)
 }
