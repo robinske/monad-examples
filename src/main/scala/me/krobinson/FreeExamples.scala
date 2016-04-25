@@ -35,12 +35,14 @@ case object PrintEvaluator extends FunctorTransformer[Todo, Option] {
     a match {
       case NewTask(task) =>
         println(s"New task added: $task")
+        Some(task)
       case CompleteTask(task) =>
         println(s"Task completed: $task")
+        Some(task)
       case GetTasks(default) =>
         println(s"Request to fetch tasks")
+        Some(default)
     }
-    None
   }
 }
 
@@ -52,6 +54,15 @@ object FreeExamples {
   implicit object id extends Monad[Id] {
     def pure[A](given: A): Id[A] = given
     def flatMap[A, B](given: Id[A])(fn: A => Id[B]): Id[B] = fn(given)
+  }
+
+  // make Option a monad so we can use it in our `runFree` code
+  implicit object opt extends Monad[Option] {
+    def pure[A](given: A): Option[A] = Some(given)
+    def flatMap[A, B](given: Option[A])(fn: A => Option[B]): Option[B] = given match {
+      case Some(o) => fn(o)
+      case None    => None
+    }
   }
 
   val freeStrings: Free[Id, String] =
