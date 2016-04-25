@@ -172,13 +172,12 @@ class Spec extends FunSpec with Matchers {
       val f = { s: String => s + "a" }
       val g = { s: String => s + "l" }
       val h = { s: String => s + "a" }
-
       // evaluate the functions, can't compare functions for tests
       assert(append(f, append(g, h))("sc") == append(append(f, g), h)("sc"))
 
       // identity
-      assert(append(f, identity[String])("sc") == "sca")
-      assert(append(identity[String], f)("sc") == "sca")
+      assert(append(f, identity[String])("") == "a")
+      assert(append(identity[String], f)("") == "a")
     }
 
   }
