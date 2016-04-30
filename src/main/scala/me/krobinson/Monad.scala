@@ -25,3 +25,7 @@ trait Monad[M[_]] extends Functor[M] /* with Monoid[_ => M[_]] */ {
 
   def identity[A]: A => M[A] = a => pure(a)
 }
+
+object Monad {
+  def apply[F[_]:Monad]: Monad[F] = implicitly[Monad[F]]
+}

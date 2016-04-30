@@ -3,15 +3,15 @@ package me.krobinson.monads
 
 sealed trait Free[F[_], A] { self =>
   def flatMap[B](fn: A => Free[F, B]): Free[F, B] =
-    More(self, (a: A) => fn(a))
+    FlatMap(self, (a: A) => fn(a))
 
   def map[B](fn: A => B): Free[F, B] =
-    flatMap(a => Done(fn(a)))
+    flatMap(a => Return(fn(a)))
 }
 
-case class Done[F[_], A](given: A) extends Free[F, A]
+case class Return[F[_], A](given: A) extends Free[F, A]
 case class Suspend[F[_], A](fn: F[A]) extends Free[F, A]
-case class More[F[_], A, B](free: Free[F, A], fn: A => Free[F, B]) extends Free[F, B]
+case class FlatMap[F[_], A, B](free: Free[F, A], fn: A => Free[F, B]) extends Free[F, B]
 
 object Free {
 
@@ -26,23 +26,25 @@ object Free {
   // basic interpreter for the string concatenation example
   @annotation.tailrec
   def run[F[_], A](f: Free[F, A]): A = f match {
-    case Done(s)                     => s
-    case More(More(given, fn1), fn2) => run(given.flatMap(s1 => fn1(s1).flatMap(s2 => fn2(s2))))
-    case More(Done(given), fn)       => run(fn(given))
+    case Return(s)                     => s
+    case FlatMap(FlatMap(given, fn1), fn2) => run(given.flatMap(s1 => fn1(s1).flatMap(s2 => fn2(s2))))
+    case FlatMap(Return(given), fn)       => run(fn(given))
   }
 
-  def runFree[F[_], G[_], A](f: Free[F, A])(transform: FunctorTransformer[F, G])(implicit monad: Monad[G]): G[A] = {
+  def runFree[F[_], G[_]: Monad, A](f: Free[F, A])(transform: FunctorTransformer[F, G]): G[A] = {
     @annotation.tailrec
     def tailThis(free: Free[F, A]): Free[F, A] = free match {
-      case More(More(fr, fn1), fn2) => tailThis(fr.flatMap(a1 => fn1(a1).flatMap(a2 => fn2(a2))))
-      case More(Done(a), fn)        => tailThis(fn(a))
-      case _                        => free
+      case FlatMap(FlatMap(fr, fn1), fn2) => tailThis(fr.flatMap(a1 => fn1(a1).flatMap(a2 => fn2(a2))))
+      case FlatMap(Return(a), fn)         => tailThis(fn(a))
+      case _                              => free
     }
 
+    val G = Monad[G] // uses implicit objects in constructor
+
     tailThis(f) match {
-      case Done(a)                  => monad.pure(a)
+      case Return(a)                => G.pure(a)
       case Suspend(fa)              => transform(fa)
-      case More(Suspend(fa), fn)    => monad.flatMap(transform(fa)){ a => runFree(fn(a))(transform) }
+      case FlatMap(Suspend(fa), fn) => G.flatMap(transform(fa)){ a => runFree(fn(a))(transform) }
       case _                        => throw new AssertionError("Unreachable")
     }
   }
@@ -52,15 +54,15 @@ object Free {
 
     while (true) {
       eval match {
-        case Done(a) =>
+        case Return(a) =>
           return monad.pure(a)
         case Suspend(fa) =>
           return transform(fa)
-        case More(Suspend(fa), fn) =>
+        case FlatMap(Suspend(fa), fn) =>
           return monad.flatMap(transform(fa))(a => runLoop(fn(a))(transform))
-        case More(More(given, fn1), fn2) =>
+        case FlatMap(FlatMap(given, fn1), fn2) =>
           eval = given.flatMap(s1 => fn1(s1).flatMap(s2 => fn2(s2)))
-        case More(Done(s), fn) =>
+        case FlatMap(Return(s), fn) =>
           eval = fn(s)
       }
     }

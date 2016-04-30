@@ -29,7 +29,6 @@ case object ProductionEvaluator extends FunctorTransformer[Todo, Option] {
   }
 }
 
-
 case object PrintEvaluator extends FunctorTransformer[Todo, Option] {
   def apply[A](a: Todo[A]): Option[A] = {
     a match {
@@ -67,9 +66,9 @@ object FreeExamples {
 
   val freeStrings: Free[Id, String] =
     for {
-      a <- Done("chain")
-      b <- Done("these")
-      c <- Done("together")
+      a <- Return("chain")
+      b <- Return("these")
+      c <- Return("together")
     } yield s"$a $b $c"
 
   val todos: Free[Todo, Map[String, Boolean]] =
@@ -82,13 +81,13 @@ object FreeExamples {
     } yield tsks
 
   val todosExpanded: Free[Todo, Map[String, Boolean]] =
-    More(
+    FlatMap(
       Suspend(NewTask("Go to scala days")), (a: String) =>
-      More(
+      FlatMap(
         Suspend(NewTask("Write a novel")), (b: String) =>
-        More(
+        FlatMap(
           Suspend(NewTask("Meet Tina Fey")), (c: String) =>
-          More(
+          FlatMap(
             Suspend(CompleteTask("Go to scala days")), (d: String) =>
             Suspend(GetTasks(default = Map.empty))
           )

@@ -87,10 +87,10 @@ class Spec extends FunSpec with Matchers {
   describe("Free") {
     it("should construct a nested datastructure with .flatMap and .map methods") {
       val expected: Free[Id, String] =
-        More[Id, String, String](
-          Done[Id, String]("chain"), a => More[Id, String, String](
-            Done[Id, String]("these"), b => More[Id, String, String](
-              Done[Id, String]("together"), c => Done[Id, String](s"$a $b $c")
+        FlatMap[Id, String, String](
+          Return[Id, String]("chain"), a => FlatMap[Id, String, String](
+            Return[Id, String]("these"), b => FlatMap[Id, String, String](
+              Return[Id, String]("together"), c => Return[Id, String](s"$a $b $c")
             )
           )
         )
