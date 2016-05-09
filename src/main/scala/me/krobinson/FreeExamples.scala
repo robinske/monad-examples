@@ -50,13 +50,13 @@ object FreeExamples {
   import Todo._
 
   // make id a monad so we can use it in our `runFree` code
-  implicit object id extends Monad[Id] {
+  implicit val idMonad = new Monad[Id] {
     def pure[A](given: A): Id[A] = given
     def flatMap[A, B](given: Id[A])(fn: A => Id[B]): Id[B] = fn(given)
   }
 
   // make Option a monad so we can use it in our `runFree` code
-  implicit object opt extends Monad[Option] {
+  implicit val optMonad = new Monad[Option] {
     def pure[A](given: A): Option[A] = Some(given)
     def flatMap[A, B](given: Option[A])(fn: A => Option[B]): Option[B] = given match {
       case Some(o) => fn(o)
