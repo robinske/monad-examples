@@ -5,8 +5,10 @@ sealed trait Free[F[_], A] { self =>
   def flatMap[B](fn: A => Free[F, B]): Free[F, B] =
     FlatMap(self, (a: A) => fn(a))
 
+  def pure[T](a: T): Free[F, T] = Return(a)
+
   def map[B](fn: A => B): Free[F, B] =
-    flatMap(a => Return(fn(a)))
+    flatMap(a => pure(fn(a)))
 }
 
 case class Return[F[_], A](given: A) extends Free[F, A]
